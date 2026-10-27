@@ -41,9 +41,15 @@ By stepping the duty cycle down, the applied average voltage ($V$) drops below t
 ## 3. System Architecture & Embedded Control
 
 **The Power Electronics Topology**
+
+![Open Loop Physical Plant](docs/open_loop_physical_plant.png)
+
 The power stage utilizes a Class B (Half-Bridge) Chopper with two active MOSFETs arranged vertically across the 48V DC bus. This synchronous topology allows bidirectional current flow. The physical Simscape network evaluates at a high-frequency $1\ \mu\text{s}$ sample rate to capture real-world hardware transients.
 
 **Cascaded Control & Native Discrete PI Implementation**
+
+![Closed Loop Architecture](docs/closed_loop_architecture.png)
+
 To control the physical plant while protecting the hardware, the system employs a dual-loop cascaded architecture running at a strict 10 kHz ($100\ \mu\text{s}$) discrete sample rate. Built entirely with native Simulink discrete blocks to bypass external compiler constraints, the architecture ensures absolute mathematical fidelity:
 *   **Outer Speed Loop:** Compares target speed against measured speed and outputs a current command.
 *   **Anti-Windup Clamping:** The outer speed PI block restricts the current output to $\pm 20\text{ A}$ (utilizing active clamping) to protect the plant from extreme inrush currents and prevent mathematical integrator windup.
@@ -51,12 +57,28 @@ To control the physical plant while protecting the hardware, the system employs 
 *   **Back-EMF Feedforward:** To decouple motor speed from the current controller, the measured speed is multiplied by $K_e$ ($0.35$) to estimate the motor's active back-EMF. This value is injected directly into the control voltage, relieving the inner loop from chasing mechanical speed transients.
 *   **PWM Normalization:** The commanded voltage is normalized against the 48V bus and passed through a 0-1 Saturation block to synthesize the final 10 kHz complementary PWM logic.
 
+**Hardware-in-the-Loop (HIL) Readiness**
+
+![C Caller Interface](docs/c_caller_interface.png)
+
+The repository also includes the bare-metal C firmware (`ev_controller.c`) and demonstrates the C Caller port configuration, verifying that the control logic can be directly compiled into embedded microcontrollers for physical prototyping.
+
 ## 4. Engineering Diagnostics & Validation
 
 **Phase 1: Overcoming Discontinuous Conduction Mode (DCM)**
-During initial open-loop testing with a 70% duty cycle, the plant exhibited an artificial speed drift up to 110 rad/s. Diagnostic telemetry revealed the armature current clipping flat at 0 A with a distinct kink in the speed curve at $t = 0.12\text{ s}$. This was traced to an under-driven gate signal on the synchronous rectifier, trapping the motor in Discontinuous Conduction Mode (DCM) and inflating the average terminal voltage. Correcting the complementary logic to deliver a full 10V gate drive forced the drive into continuous conduction, eliminating the speed kink and locking the steady state perfectly to mathematical expectations.
+
+![Open Loop DCM Anomaly](docs/open_loop_dcm_anomaly.png)
+
+During initial open-loop testing with a 70% duty cycle, the plant exhibited an artificial speed drift up to 110 rad/s. Diagnostic telemetry revealed the armature current clipping flat at 0 A with a distinct kink in the speed curve at $t = 0.12\text{ s}$. This was traced to an under-driven gate signal on the synchronous rectifier, trapping the motor in Discontinuous Conduction Mode (DCM) and inflating the average terminal voltage. 
+
+![Open Loop CCM Validation](docs/open_loop_ccm_validation.png)
+
+Correcting the complementary logic to deliver a full 10V gate drive forced the drive into continuous conduction, eliminating the speed kink and locking the steady state perfectly to mathematical expectations.
 
 **Phase 2: Closed-Loop Transient Performance & Anti-Windup**
+
+![Closed Loop Cascaded Performance](results/closed_loop_cascaded_performance.png)
+
 The final digital twin was subjected to a dynamic two-quadrant step profile to validate the cascaded PI tuning and anti-windup configuration. During initial closed-loop tests, the speed loop exhibited a $+10\text{ rad/s}$ overshoot due to integrator windup accumulating during the 20 A physical current saturation phase. Activating the anti-windup clamping algorithm inside the discrete PI blocks completely eliminated this mathematical lag.
 *   **Quadrant 1 Motoring ($0$ to $1.0\text{ s}$):** Commanded to accelerate to 100 rad/s, the inner current loop perfectly clamped the inrush transient at exactly $+20\text{ A}$. The integration of anti-windup clamping in the speed loop resulted in a pristine, zero-overshoot lock onto the target speed, seamlessly transitioning the current down to steady state.
 *   **Quadrant 2 Regenerative Braking ($1.0\text{ s}$ to $2.0\text{ s}$):** At $t = 1.0\text{ s}$, the reference speed was stepped down to 50 rad/s. The controller instantly commanded maximum regenerative braking, snapping the armature current to $-20\text{ A}$, forcing kinetic energy back into the DC bus until the new target was reached.
@@ -66,7 +88,13 @@ The final digital twin was subjected to a dynamic two-quadrant step profile to v
 ```text
 EV-TwoQuadrant-Drive-DigitalTwin/
 ├── docs/                                      # Schematics and block diagrams
+│   ├── c_caller_interface.png                 
+│   ├── closed_loop_architecture.png           
+│   ├── open_loop_ccm_validation.png           
+│   ├── open_loop_dcm_anomaly.png              
+│   └── open_loop_physical_plant.png           
 ├── results/                                   # Scope telemetry and performance graphs
+│   └── closed_loop_cascaded_performance.png   
 ├── src/
 │   ├── controller/
 │   │   ├── ev_controller.c                    # Bare-metal C control logic (HIL ready)
