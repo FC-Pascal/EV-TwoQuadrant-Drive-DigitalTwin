@@ -78,9 +78,10 @@ EV-TwoQuadrant-Drive-DigitalTwin/
 │       └── two_quadrant_drive_plant.slx       # Open-loop physical plant for CCM testing
 └── README.md
 
-6. How to Run
+```
+## 6. How to Run
 1. Execute src/init/init_motor_parameters.m in MATLAB to load the workspace variables, PI gains, and sample times.
 
 2. Open src/plant/closed_loop_two_quadrant_drive.slx.
 
-3.Run the simulation to generate the final cascaded performance telemetry.
+3. Run the simulation to generate the final cascaded performance telemetry.
